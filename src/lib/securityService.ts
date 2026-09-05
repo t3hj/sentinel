@@ -21,7 +21,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 }
 
 export async function getIncident(id: string): Promise<IncidentWithEvents> {
-  const { data, error } = await supabase.from('incidents').select('*, incident_events(event:security_events(*)), detection_matches(id,evidence)').eq('id', id).single()
+  const { data, error } = await supabase.from('incidents').select('*, incident_events(event:security_events(*)), detection_matches(id,evidence,rule:detection_rules(id,name,description,severity))').eq('id', id).single()
   if (error) throw error
   return data as unknown as IncidentWithEvents
 }
