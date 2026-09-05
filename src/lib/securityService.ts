@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AppRole, DashboardData, DetectionRule, Incident, IncidentActivity, IncidentWithEvents, Playbook, RemediationType, SecurityEvent, UserProfile } from './types'
+import type { AppRole, AuditLog, DashboardData, DetectionRule, Incident, IncidentActivity, IncidentWithEvents, Playbook, RemediationType, SecurityEvent, UserProfile } from './types'
 
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const { data: { user } } = await supabase.auth.getUser()
@@ -51,6 +51,23 @@ export async function getPlaybooks(): Promise<Playbook[]> {
 export async function setDetectionRuleEnabled(id: string, enabled: boolean) {
   const { error } = await supabase.from('detection_rules').update({ enabled }).eq('id', id)
   if (error) throw error
+}
+
+export async function getUsers(): Promise<UserProfile[]> {
+  const { data, error } = await supabase.from('users').select('id,email,display_name,role').order('email')
+  if (error) throw error
+  return (data ?? []) as UserProfile[]
+}
+
+export async function setUserRole(id: string, role: AppRole) {
+  const { error } = await supabase.from('users').update({ role }).eq('id', id)
+  if (error) throw error
+}
+
+export async function getRecentAuditLogs(): Promise<AuditLog[]> {
+  const { data, error } = await supabase.from('audit_logs').select('id,timestamp,action,resource,resource_id,result,metadata').order('timestamp', { ascending: false }).limit(50)
+  if (error) throw error
+  return (data ?? []) as AuditLog[]
 }
 
 export async function getEvents(filters: { search?: string; severity?: string; eventType?: string; page?: number; pageSize?: number }) {
