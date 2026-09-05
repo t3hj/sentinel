@@ -32,7 +32,8 @@ export async function getEvents(filters: { search?: string; severity?: string; e
   let query = supabase.from('security_events').select('*', { count: 'exact' }).order('timestamp', { ascending: false }).range(page * pageSize, page * pageSize + pageSize - 1)
   if (filters.severity) query = query.eq('severity', filters.severity)
   if (filters.eventType) query = query.eq('event_type', filters.eventType)
-  if (filters.search) query = query.or(`source.ilike.%${filters.search}%,username.ilike.%${filters.search}%,hostname.ilike.%${filters.search}%`)
+  const search = filters.search?.replace(/[,%()]/g, ' ').trim()
+  if (search) query = query.or(`source.ilike.%${search}%,username.ilike.%${search}%,hostname.ilike.%${search}%`)
   const { data, count, error } = await query
   if (error) throw error
   return { events: (data ?? []) as SecurityEvent[], count: count ?? 0 }
