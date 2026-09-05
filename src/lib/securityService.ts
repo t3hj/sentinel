@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AppRole, DashboardData, Incident, IncidentWithEvents, RemediationType, SecurityEvent, UserProfile } from './types'
+import type { AppRole, DashboardData, Incident, IncidentActivity, IncidentWithEvents, RemediationType, SecurityEvent, UserProfile } from './types'
 
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const { data: { user } } = await supabase.auth.getUser()
@@ -24,6 +24,16 @@ export async function getIncident(id: string): Promise<IncidentWithEvents> {
   const { data, error } = await supabase.from('incidents').select('*, incident_events(event:security_events(*)), detection_matches(id,evidence)').eq('id', id).single()
   if (error) throw error
   return data as unknown as IncidentWithEvents
+}
+
+export async function getIncidentActivity(id: string): Promise<IncidentActivity> {
+  const [{ data: investigations, error: investigationError }, { data: actions, error: actionError }, { data: logs, error: logError }] = await Promise.all([
+    supabase.from('ai_investigations').select('*').eq('incident_id', id).order('created_at', { ascending: false }),
+    supabase.from('remediation_actions').select('*').eq('incident_id', id).order('requested_at', { ascending: false }),
+    supabase.from('audit_logs').select('*').eq('resource', 'incident').eq('resource_id', id).order('timestamp', { ascending: false }),
+  ])
+  if (investigationError || actionError || logError) throw investigationError ?? actionError ?? logError
+  return { ai_investigations: investigations ?? [], remediation_actions: actions ?? [], audit_logs: logs ?? [] }
 }
 
 export async function getEvents(filters: { search?: string; severity?: string; eventType?: string; page?: number; pageSize?: number }) {
