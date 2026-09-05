@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AppRole, DashboardData, Incident, IncidentActivity, IncidentWithEvents, RemediationType, SecurityEvent, UserProfile } from './types'
+import type { AppRole, DashboardData, DetectionRule, Incident, IncidentActivity, IncidentWithEvents, Playbook, RemediationType, SecurityEvent, UserProfile } from './types'
 
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const { data: { user } } = await supabase.auth.getUser()
@@ -34,6 +34,23 @@ export async function getIncidentActivity(id: string): Promise<IncidentActivity>
   ])
   if (investigationError || actionError || logError) throw investigationError ?? actionError ?? logError
   return { ai_investigations: investigations ?? [], remediation_actions: actions ?? [], audit_logs: logs ?? [] }
+}
+
+export async function getDetectionRules(): Promise<DetectionRule[]> {
+  const { data, error } = await supabase.from('detection_rules').select('id,name,description,severity,enabled,rule_type,definition,updated_at').order('name')
+  if (error) throw error
+  return (data ?? []) as DetectionRule[]
+}
+
+export async function getPlaybooks(): Promise<Playbook[]> {
+  const { data, error } = await supabase.from('playbooks').select('id,name,description,actions,required_role,enabled').order('name')
+  if (error) throw error
+  return (data ?? []) as Playbook[]
+}
+
+export async function setDetectionRuleEnabled(id: string, enabled: boolean) {
+  const { error } = await supabase.from('detection_rules').update({ enabled }).eq('id', id)
+  if (error) throw error
 }
 
 export async function getEvents(filters: { search?: string; severity?: string; eventType?: string; page?: number; pageSize?: number }) {
