@@ -17,6 +17,7 @@ See [docs/architecture.md](docs/architecture.md), [docs/threat-model.md](docs/th
 1. Install Node.js 20+ and the Supabase CLI.
 2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 3. In the Supabase SQL Editor, run `supabase/schema.sql`.
+	If the schema was already run, run the incremental migration `supabase/migrations/202609060001_admin_audit_triggers.sql` instead.
 4. Deploy functions:
 
 ```powershell
