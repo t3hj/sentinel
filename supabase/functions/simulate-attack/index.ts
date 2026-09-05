@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { audit, corsHeaders, errorResponse, json, requireContext, requireRole } from '../_shared/auth.ts'
+import { calculateRisk, severityFor } from '../_shared/risk.ts'
 
 const scenarios = {
   BRUTE_FORCE: ['LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_SUCCESS'],
@@ -9,16 +10,7 @@ const scenarios = {
   MULTI_STAGE: ['LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_SUCCESS', 'PRIVILEGE_ESCALATION', 'SUSPICIOUS_PROCESS', 'UNUSUAL_NETWORK_CONNECTION', 'LARGE_DATA_TRANSFER', 'FILE_MODIFICATION'],
 } as const
 
-type EventType = typeof scenarios[keyof typeof scenarios][number]
-const severityFor = (eventType: EventType) => eventType === 'PRIVILEGE_ESCALATION' || eventType === 'LARGE_DATA_TRANSFER' ? 'HIGH' : eventType === 'SUSPICIOUS_PROCESS' || eventType === 'UNUSUAL_NETWORK_CONNECTION' ? 'MEDIUM' : 'LOW'
 const scenarioTitle = (scenario: string) => ({ BRUTE_FORCE: 'Brute force authentication', ACCOUNT_COMPROMISE: 'Possible account compromise', PRIVILEGE_ESCALATION: 'Suspicious privilege escalation', DATA_EXFILTRATION: 'Suspicious outbound transfer', MULTI_STAGE: 'Multi-stage attack detected' }[scenario] ?? 'Synthetic security incident')
-
-function calculateRisk(events: { event_type: string }[]) {
-  const failed = events.filter((event) => event.event_type === 'LOGIN_FAILED').length
-  const score = Math.min(100, 20 + failed * 8 + (events.some((event) => event.event_type === 'LOGIN_SUCCESS') ? 15 : 0) + (events.some((event) => event.event_type === 'PRIVILEGE_ESCALATION') ? 25 : 0) + (events.some((event) => event.event_type === 'SUSPICIOUS_PROCESS') ? 12 : 0) + (events.some((event) => event.event_type === 'LARGE_DATA_TRANSFER') ? 20 : 0) + (events.some((event) => event.event_type === 'FILE_MODIFICATION') ? 8 : 0))
-  const severity = score >= 80 ? 'CRITICAL' : score >= 60 ? 'HIGH' : score >= 35 ? 'MEDIUM' : 'LOW'
-  return { score, severity }
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() })
