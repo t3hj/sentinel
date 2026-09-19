@@ -83,9 +83,25 @@ export async function getEvents(filters: { search?: string; severity?: string; e
   return { events: (data ?? []) as SecurityEvent[], count: count ?? 0 }
 }
 
+function edgeFunctionErrorMessage(reason: unknown): string {
+  // supabase.functions.invoke throws FunctionsHttpError with a generic message;
+  // the backend's safe JSON body ({ error }) is on error.context. Only surface
+  // the backend's own message (it is deliberately safe); never raw response
+  // details, headers, or anything from non-Function errors.
+  const context = (reason as { context?: unknown } | null)?.context
+  if (context && typeof context === 'object') {
+    try {
+      const body = typeof context === 'string' ? JSON.parse(context) : context
+      const message = (body as { error?: unknown } | null)?.error
+      if (typeof message === 'string' && message.length > 0 && message.length <= 300) return message
+    } catch { /* fall through to generic message */ }
+  }
+  return reason instanceof Error ? reason.message : 'Request failed'
+}
+
 export async function invokeSecurityFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body })
-  if (error) throw error
+  if (error) throw new Error(edgeFunctionErrorMessage(error))
   return data as T
 }
 
