@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { audit, corsHeaders, errorResponse, json, requireContext, requireRole } from '../_shared/auth.ts'
 import { calculateRisk, severityFor } from '../_shared/risk.ts'
+import { ClientError, enforceRateLimit, parseJsonBody, requireEnum } from '../_shared/validation.ts'
 
 const scenarios = {
   BRUTE_FORCE: ['LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_FAILED', 'LOGIN_SUCCESS'],
@@ -12,13 +13,18 @@ const scenarios = {
 
 const scenarioTitle = (scenario: string) => ({ BRUTE_FORCE: 'Brute force authentication', ACCOUNT_COMPROMISE: 'Possible account compromise', PRIVILEGE_ESCALATION: 'Suspicious privilege escalation', DATA_EXFILTRATION: 'Suspicious outbound transfer', MULTI_STAGE: 'Multi-stage attack detected' }[scenario] ?? 'Synthetic security incident')
 
+const scenarioKeys = Object.keys(scenarios) as (keyof typeof scenarios)[]
+
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() })
+  const origin = req.headers.get('Origin')
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(origin) })
+  if (req.method !== 'POST') throw new ClientError('Method not allowed', 405)
   try {
     const context = await requireContext(req)
     requireRole(context, ['ADMIN', 'ANALYST'])
-    const { scenario } = await req.json() as { scenario?: keyof typeof scenarios }
-    if (!scenario || !scenarios[scenario]) throw new Error('Unknown simulation scenario')
+    await enforceRateLimit(context.db, `simulate-attack:${context.user.id}`, { windowSeconds: 60, max: 10 })
+    const body = await parseJsonBody(req)
+    const scenario = requireEnum(body.scenario, 'scenario', scenarioKeys)
     const correlationId = crypto.randomUUID()
     const now = Date.now()
     const eventTypes = scenarios[scenario]
@@ -47,5 +53,5 @@ Deno.serve(async (req) => {
     if (matchingRules.length) await context.db.from('detection_matches').insert(matchingRules.map((rule) => ({ rule_id: rule.id, incident_id: incident.id, event_ids: insertedEvents.map((event) => event.id), evidence: { matched_event_types: insertedEvents.map((event) => event.event_type), deterministic_score: score } })))
     await audit(context, 'SYNTHETIC_ATTACK_SIMULATED', 'incident', incident.id, 'SUCCESS', { scenario, event_count: insertedEvents.length, risk_score: score })
     return json({ incident, eventCount: insertedEvents.length })
-  } catch (error) { return errorResponse(error) }
+  } catch (error) { return errorResponse(error, origin) }
 })

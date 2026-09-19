@@ -1,12 +1,16 @@
 import { audit, corsHeaders, errorResponse, json, requireContext, requireRole } from '../_shared/auth.ts'
+import { ClientError, enforceRateLimit, parseJsonBody, requireUuid } from '../_shared/validation.ts'
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() })
+  const origin = req.headers.get('Origin')
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(origin) })
+  if (req.method !== 'POST') throw new ClientError('Method not allowed', 405)
   try {
     const context = await requireContext(req)
     requireRole(context, ['ADMIN', 'ANALYST'])
-    const { incidentId } = await req.json() as { incidentId?: string }
-    if (!incidentId) throw new Error('incidentId is required')
+    await enforceRateLimit(context.db, `investigate-incident:${context.user.id}`, { windowSeconds: 60, max: 10 })
+    const body = await parseJsonBody(req)
+    const incidentId = requireUuid(body.incidentId, 'incidentId')
     const { data: incident, error: incidentError } = await context.db.from('incidents').select('*').eq('id', incidentId).single()
     if (incidentError || !incident) throw new Error('Incident not found')
     const { data: links, error: linkError } = await context.db.from('incident_events').select('event:security_events(*)').eq('incident_id', incidentId)
@@ -21,5 +25,5 @@ Deno.serve(async (req) => {
     await audit(context, 'AI_INVESTIGATION_STARTED', 'incident', incidentId, 'SUCCESS', { investigation_id: investigation.id, approved_tools: ['get_incident_events'] })
     await audit(context, 'AI_TOOL_CALLED', 'incident', incidentId, 'SUCCESS', { tool: 'get_incident_events', result_count: events.length })
     return json({ investigationId: investigation.id, findings, recommendation })
-  } catch (error) { return errorResponse(error) }
+  } catch (error) { return errorResponse(error, origin) }
 })

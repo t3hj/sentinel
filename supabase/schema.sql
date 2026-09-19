@@ -210,6 +210,60 @@ end $$;
 
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
 
+create table public.rate_limit_windows (
+  bucket text not null,
+  window_start timestamptz not null,
+  hits integer not null default 1,
+  primary key (bucket, window_start)
+);
+alter table public.rate_limit_windows enable row level security;
+
+create or replace function public.rate_limit_hit(p_bucket text, p_window_start timestamptz)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$ declare
+  v_hits integer;
+begin
+  insert into public.rate_limit_windows (bucket, window_start, hits)
+  values (p_bucket, p_window_start, 1)
+  on conflict (bucket, window_start)
+  do update set hits = public.rate_limit_windows.hits + 1
+  returning hits into v_hits;
+  return v_hits;
+end $$;
+
+create index on public.rate_limit_windows(window_start);
+
+create or replace function public.purge_rate_limit_windows()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$ begin
+  delete from public.rate_limit_windows where window_start < now() - interval '1 hour';
+  return null;
+end $$;
+
+create trigger rate_limit_purge after insert on public.rate_limit_windows
+for each statement execute procedure public.purge_rate_limit_windows();
+
+create or replace function public.enforce_audit_logs_append_only()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$ begin
+  if not (current_user = 'service_role' or auth.role() = 'service_role') then
+    raise exception 'audit_logs is append-only' using errcode = 'insufficient_privilege';
+  end if;
+  return coalesce(new, old);
+end $$;
+
+create trigger audit_logs_append_only before update or delete on public.audit_logs
+for each row execute procedure public.enforce_audit_logs_append_only();
+
 create or replace function public.log_admin_change()
 returns trigger
 language plpgsql
