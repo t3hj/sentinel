@@ -1,6 +1,6 @@
 # Sentinel
 
-Sentinel is an AI-assisted Security Operations and Incident Response platform foundation. It is designed around evidence-backed detection, controlled investigation tools, human-approved simulated remediation, and an auditable event trail.
+Sentinel is a Security Operations and Incident Response prototype with deterministic investigation logic and a boundary for future AI integration. It is designed around evidence-backed detection, controlled investigation tools, human-approved simulated remediation, and an auditable event trail.
 
 ## Architecture
 
@@ -59,6 +59,15 @@ The simulator writes a labeled sequence of safe synthetic events. The `simulate-
 `supabase/schema.sql` creates users, assets, security_events, incidents, incident_events, detection_rules, detection_matches, remediation_actions, audit_logs, ai_investigations, and playbooks. It also creates enums, indexes, triggers, RLS policies, seed rules/playbooks, and auth profile provisioning.
 
 ## Testing and limitations
+
+```sh
+npm ci
+npm test
+npm run typecheck:functions
+npm run build
+```
+
+The unit tests exercise shared risk scoring and validation. The function typecheck checks the Edge Function source separately from the frontend build. Neither replaces role-based integration tests against a disposable Supabase project.
 
 `npm run build` validates the frontend TypeScript and Vite bundle. Integration testing requires a configured Supabase project, deployed functions, and test accounts for each role. The remediation actions are simulations only; no external identity, network, or endpoint control is performed. The current analyst implementation is deterministic and provides the service boundary for a future model provider.
 
